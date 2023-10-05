@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import sqlite3
 import pandas as pd
+import datetime
 
 app = Flask(__name__)
 CORS(app)
@@ -69,16 +70,12 @@ def arrange_data(result):
         acknowledged_datetime.append(res[4])
         user.append(res[5])
     
-    df = pd.DataFrame({'activity':activity, 'activity_type':activity_type, 'status':status, 'reported_datetime':reported_datetime, 'acknowledged_datetime':acknowledged_datetime, 'user':user})
-    #print(df)
-    return jsonify({'data' : df.to_dict()})
+    return jsonify({'activity': activity, 'activity_type':activity_type, 'status':status, 'reported_datetime':reported_datetime, 'acknowledged_datetime':acknowledged_datetime, 'user':user})
 
 @app.route('/update', methods=['PUT'])
 def update():
     name_param = request.args.get('name')
     status_param = request.args.get('status')
-
-    data = {} #to return
 
     conn = sqlite3.connect('acknowledge.db')
     c = conn.cursor()
@@ -98,6 +95,29 @@ def update():
             return jsonify({'message': f'could not find activity {name_param}'})
     else:
         return jsonify({'message': 'no parameters'})
+    
+@app.route('/acknowledge', methods=['PUT'])
+def acknowledge():
+    name_param = request.args.get('name')
+
+    conn = sqlite3.connect('acknowledge.db')
+    c = conn.cursor()
+
+    if name_param is not None:
+        c.execute('SELECT COUNT(*) FROM acknowledgement_activity WHERE activity = ? AND status=?',(name_param,'pending'))
+
+        if c.fetchone()[0] == 1:
+            current_time = datetime.datetime.now()
+            formatted_time = current_time.strftime('%Y-%m-%d %H:%M:%S')
+            c.execute('UPDATE acknowledgement_activity SET status = ?, acknowledged_datetime = ? WHERE activity=?', ('acknowledged', formatted_time, name_param))
+            conn.commit()
+            conn.close()
+            return jsonify({'message': f'activity {name_param} has been acknowledged'})
+        else:
+            conn.close()
+            return jsonify({'message': f'could not find pending activity {name_param}'})
+    else:
+        return jsonify({'message': 'no/invalid parameters'})
 
 if __name__ == '__main__':
     app.run(debug=True)
