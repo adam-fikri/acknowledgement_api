@@ -6,21 +6,19 @@ import pandas as pd
 app = Flask(__name__)
 CORS(app)
 
-@app.route('/hello', methods=['GET'])
+@app.route('/', methods=['GET'])
 def hello_world():
     return jsonify({'message' : 'hello world'})
 
-@app.route('/get_param', methods=['GET']) #test get param
-def get_param():
-    param = request.get_json()
-    return jsonify(param)
+@app.route('/test_req', methods=['GET']) #test get req
+def get_body():
+    req = request.get_json()
+    return jsonify(req)
 
-@app.route('/acknowledgement_activity')
-def get_activity():
-    type_param = request.args.get('activity_type')
+@app.route('/get', methods=['GET'])
+def get():
+    type_param = request.args.get('type')
     status_param = request.args.get('status')
-
-    data = {} #to return
 
     conn = sqlite3.connect('acknowledge.db')
     c = conn.cursor()
@@ -30,22 +28,30 @@ def get_activity():
         c.execute('SELECT * FROM acknowledgement_activity WHERE activity_type=?', (type_param,))
         #print(c.fetchall())
         data = arrange_data(c.fetchall())
+
+        conn.close()
+        return data #already jsonified
     elif type_param is None and status_param is not None:
         c.execute('SELECT * FROM acknowledgement_activity WHERE status=?', (status_param,))
         #print(c.fetchall())
         data = arrange_data(c.fetchall())
+
+        conn.close()
+        return data #already jsonified
     elif type_param is not None and status_param is not None:
         c.execute('SELECT * FROM acknowledgement_activity WHERE activity_type=? AND status=?', (type_param, status_param))
         #print(c.fetchall())
         data = arrange_data(c.fetchall())
+
+        conn.close()
+        return data #already jsonified
     else:
         c.execute('SELECT * FROM acknowledgement_activity')
         #print(c.fetchall())
         data = arrange_data(c.fetchall())
-    
 
-    conn.close()
-    return data
+        conn.close()
+        return data #already jsonified
 
 def arrange_data(result):
     activity = []
@@ -66,8 +72,32 @@ def arrange_data(result):
     df = pd.DataFrame({'activity':activity, 'activity_type':activity_type, 'status':status, 'reported_datetime':reported_datetime, 'acknowledged_datetime':acknowledged_datetime, 'user':user})
     #print(df)
     return jsonify({'data' : df.to_dict()})
-    
 
+@app.route('/update', methods=['PUT'])
+def update():
+    name_param = request.args.get('name')
+    status_param = request.args.get('status')
+
+    data = {} #to return
+
+    conn = sqlite3.connect('acknowledge.db')
+    c = conn.cursor()
+
+    if name_param is not None and status_param is not None:
+        if status_param not in ['pending', 'acknowledged']:
+            return jsonify({'message': 'invalid status to update'})
+        
+        c.execute('SELECT COUNT(*) FROM acknowledgement_activity WHERE activity = ?',(name_param,))
+
+        if c.fetchone()[0] == 1:
+            c.execute('UPDATE acknowledgement_activity SET status = ? WHERE activity=?', (status_param, name_param))
+            conn.commit()
+            conn.close()
+            return jsonify({'message': f'activity {name_param} has been updated to {status_param}'})
+        else:
+            return jsonify({'message': f'could not find activity {name_param}'})
+    else:
+        return jsonify({'message': 'no parameters'})
 
 if __name__ == '__main__':
     app.run(debug=True)
