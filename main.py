@@ -18,6 +18,7 @@ def get_body():
 
 @app.route('/get', methods=['GET'])
 def get():
+    name_param = request.args.get('name')
     type_param = request.args.get('type')
     status_param = request.args.get('status')
 
@@ -25,7 +26,15 @@ def get():
     c = conn.cursor()
 
 
-    if type_param is not None and status_param is None:
+    if name_param is not None:
+        c.execute('SELECT * FROM acknowledgement_activity WHERE activity=?', (name_param,))
+        res = c.fetchone()
+
+        data = {'activity':res[0], 'activity_type':res[1], 'status':res[2], 'reported_datetime':res[3], 'acknowledged_datetime':res[4], 'user':res[5]}
+
+        conn.close()
+        return jsonify(data)
+    elif type_param is not None and status_param is None:
         c.execute('SELECT * FROM acknowledgement_activity WHERE activity_type=?', (type_param,))
         #print(c.fetchall())
         data = arrange_data(c.fetchall())
